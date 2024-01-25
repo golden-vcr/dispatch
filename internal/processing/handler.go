@@ -59,7 +59,7 @@ func (h *handler) Handle(ctx context.Context, logger *slog.Logger, ev *etwitch.E
 
 func (h *handler) handleViewerFollowed(ctx context.Context, logger *slog.Logger, viewer *etwitch.Viewer) error {
 	// Generate an alert indicating that this viewer is now following the channel
-	err := h.produceOnscreenEvent(ctx, e.Event{
+	err := h.produceOnscreenEvent(ctx, logger, e.Event{
 		Type: e.EventTypeToast,
 		Payload: e.Payload{
 			Toast: &e.PayloadToast{
@@ -92,7 +92,7 @@ func (h *handler) handleViewerCheered(ctx context.Context, logger *slog.Logger, 
 	}
 
 	// Generate an alert to display the user's cheer
-	err := h.produceOnscreenEvent(ctx, e.Event{
+	err := h.produceOnscreenEvent(ctx, logger, e.Event{
 		Type: e.EventTypeToast,
 		Payload: e.Payload{
 			Toast: &e.PayloadToast{
@@ -121,7 +121,7 @@ func (h *handler) handleViewerCheered(ctx context.Context, logger *slog.Logger, 
 			ghostSubject = strings.TrimSpace(payload.Message[ghostPrefixPos+len(ghostPrefix):])
 		}
 		if ghostSubject != "" {
-			err := h.produceGenerationRequest(ctx, genreq.Request{
+			err := h.produceGenerationRequest(ctx, logger, genreq.Request{
 				Type:   genreq.RequestTypeImage,
 				Viewer: *viewerOrAnonymous,
 				Payload: genreq.Payload{
@@ -162,7 +162,7 @@ func (h *handler) handleViewerSubscribed(ctx context.Context, logger *slog.Logge
 	)
 
 	// Generate an alert indicating that the viewer is now subscribed to the channel
-	err = h.produceOnscreenEvent(ctx, e.Event{
+	err = h.produceOnscreenEvent(ctx, logger, e.Event{
 		Type: e.EventTypeToast,
 		Payload: e.Payload{
 			Toast: &e.PayloadToast{
@@ -195,7 +195,7 @@ func (h *handler) handleViewerResubscribed(ctx context.Context, logger *slog.Log
 	)
 
 	// Generate an alert to display the viewer's resub message
-	err = h.produceOnscreenEvent(ctx, e.Event{
+	err = h.produceOnscreenEvent(ctx, logger, e.Event{
 		Type: e.EventTypeToast,
 		Payload: e.Payload{
 			Toast: &e.PayloadToast{
@@ -253,7 +253,7 @@ func (h *handler) handleViewerGiftedSubs(ctx context.Context, logger *slog.Logge
 	}
 
 	// Generate an alert to indicate that gift subs have been given out
-	err := h.produceOnscreenEvent(ctx, e.Event{
+	err := h.produceOnscreenEvent(ctx, logger, e.Event{
 		Type: e.EventTypeToast,
 		Payload: e.Payload{
 			Toast: &e.PayloadToast{
