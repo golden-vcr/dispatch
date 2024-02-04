@@ -22,8 +22,8 @@ On a Linux or WSL system:
    and [**ledger**](https://github.com/golden-vcr/ledger?tab=readme-ov-file#development-guide)
    servers are running locally.
 4. From the root of this repository:
-    - Run [`go run cmd/consumer/main.go`](./cmd/consumer/main.go) to start up the
-      consumer process.
+    - Run [`go run ./cmd/consumer`](./cmd/consumer/main.go) to start up the consumer
+      process.
 
 Once running, the consumer should respond when events that are produced to the
 `twitch-events` queue.
