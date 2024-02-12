@@ -44,6 +44,8 @@ func (h *handler) Handle(ctx context.Context, logger *slog.Logger, ev *etwitch.E
 	case etwitch.EventTypeViewerCheered:
 		viewerOrAnonymous := ev.Viewer
 		return h.handleViewerCheered(ctx, logger, viewerOrAnonymous, ev.Payload.ViewerCheered)
+	case etwitch.EventTypeViewerRedeemedFunPoints:
+		return h.handleViewerRedeemedFunPoints(ctx, logger, ev.Viewer, ev.Payload.ViewerRedeemedFunPoints.NumPoints, ev.Payload.ViewerRedeemedFunPoints.Message)
 	case etwitch.EventTypeViewerSubscribed:
 		return h.handleViewerSubscribed(ctx, logger, ev.Viewer, ev.Payload.ViewerSubscribed)
 	case etwitch.EventTypeViewerResubscribed:
@@ -111,19 +113,30 @@ func (h *handler) handleViewerCheered(ctx context.Context, logger *slog.Logger, 
 		return fmt.Errorf("failed to produce onscreen event: %w", err)
 	}
 
+	// If we have a viewer, parse their message to determine if we should immediately
+	// redeem some or all of the fun points they were just credited in order to produce
+	// an alert
+	if viewerOrAnonymous != nil {
+		viewer := viewerOrAnonymous
+		return h.handleViewerRedeemedFunPoints(ctx, logger, viewer, payload.NumBits, payload.Message)
+	}
+	return nil
+}
+
+func (h *handler) handleViewerRedeemedFunPoints(ctx context.Context, logger *slog.Logger, viewer *etwitch.Viewer, numPoints int, message string) error {
 	// Parse our message text to see if it represents a request to generate an alert,
 	// and produce a new message to the 'generation-requests' queue if so
-	if payload.NumBits >= 200 && viewerOrAnonymous != nil {
+	if numPoints >= 200 {
 		ghostPrefix := "ghost of "
 		ghostSubject := ""
-		ghostPrefixPos := strings.Index(strings.ToLower(payload.Message), ghostPrefix)
+		ghostPrefixPos := strings.Index(strings.ToLower(message), ghostPrefix)
 		if ghostPrefixPos >= 0 {
-			ghostSubject = strings.TrimSpace(payload.Message[ghostPrefixPos+len(ghostPrefix):])
+			ghostSubject = strings.TrimSpace(message[ghostPrefixPos+len(ghostPrefix):])
 		}
 		if ghostSubject != "" {
 			err := h.produceGenerationRequest(ctx, logger, genreq.Request{
 				Type:   genreq.RequestTypeImage,
-				Viewer: *viewerOrAnonymous,
+				Viewer: *viewer,
 				Payload: genreq.Payload{
 					Image: &genreq.PayloadImage{
 						Style: genreq.ImageStyleGhost,
@@ -140,7 +153,6 @@ func (h *handler) handleViewerCheered(ctx context.Context, logger *slog.Logger, 
 			}
 		}
 	}
-
 	return nil
 }
 
