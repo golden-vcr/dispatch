@@ -10,6 +10,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/golden-vcr/auth"
+	"github.com/golden-vcr/broadcasts"
 	"github.com/golden-vcr/dispatch/internal/processing"
 	"github.com/golden-vcr/ledger"
 	etwitch "github.com/golden-vcr/schemas/twitch-events"
@@ -27,6 +28,7 @@ type Config struct {
 	AuthURL          string `env:"AUTH_URL" default:"http://localhost:5002"`
 	AuthSharedSecret string `env:"AUTH_SHARED_SECRET" required:"true"`
 	LedgerURL        string `env:"LEDGER_URL" default:"http://localhost:5003"`
+	BroadcastsURL    string `env:"BROADCASTS_URL" default:"http://localhost:5007"`
 }
 
 func main() {
@@ -60,6 +62,14 @@ func main() {
 	}
 	defer amqpConn.Close()
 
+	// We need a broadcasts client in order to keep track of the current platform-wide
+	// broadcast state (i.e. broadcast ID, screening ID, tape ID, etc.) so that we can
+	// inject that state into messages that we produce
+	broadcastsClient, err := broadcasts.NewClient(ctx, app.Log(), config.BroadcastsURL, amqpConn)
+	if err != nil {
+		app.Fail("Failed to initialize broadcast state client", err)
+	}
+
 	// Prepare a producer that we can use to send messages to the onscreen-events queue,
 	// whenenver we determine that a new alert needs to be displayed
 	onscreenEventsProducer, err := rmq.NewProducer(amqpConn, "onscreen-events")
@@ -92,6 +102,7 @@ func main() {
 	h := processing.NewHandler(
 		authServiceClient,
 		ledgerClient,
+		broadcastsClient,
 		onscreenEventsProducer,
 		generationRequestsProducer,
 	)

@@ -6,7 +6,9 @@ import (
 	"strings"
 
 	"github.com/golden-vcr/auth"
+	"github.com/golden-vcr/broadcasts"
 	"github.com/golden-vcr/ledger"
+	"github.com/golden-vcr/schemas/core"
 	genreq "github.com/golden-vcr/schemas/generation-requests"
 	e "github.com/golden-vcr/schemas/onscreen-events"
 	etwitch "github.com/golden-vcr/schemas/twitch-events"
@@ -21,10 +23,11 @@ type Handler interface {
 	Handle(ctx context.Context, logger *slog.Logger, ev *etwitch.Event) error
 }
 
-func NewHandler(authServiceClient auth.ServiceClient, ledgerClient ledger.Client, onscreenEventsProducer rmq.Producer, generationRequestsProducer rmq.Producer) Handler {
+func NewHandler(authServiceClient auth.ServiceClient, ledgerClient ledger.Client, broadcastsClient broadcasts.Client, onscreenEventsProducer rmq.Producer, generationRequestsProducer rmq.Producer) Handler {
 	return &handler{
 		authServiceClient:          authServiceClient,
 		ledgerClient:               ledgerClient,
+		broadcastsClient:           broadcastsClient,
 		onscreenEventsProducer:     onscreenEventsProducer,
 		generationRequestsProducer: generationRequestsProducer,
 	}
@@ -33,6 +36,7 @@ func NewHandler(authServiceClient auth.ServiceClient, ledgerClient ledger.Client
 type handler struct {
 	authServiceClient          auth.ServiceClient
 	ledgerClient               ledger.Client
+	broadcastsClient           broadcasts.Client
 	onscreenEventsProducer     rmq.Producer
 	generationRequestsProducer rmq.Producer
 }
@@ -59,7 +63,7 @@ func (h *handler) Handle(ctx context.Context, logger *slog.Logger, ev *etwitch.E
 	return nil
 }
 
-func (h *handler) handleViewerFollowed(ctx context.Context, logger *slog.Logger, viewer *etwitch.Viewer) error {
+func (h *handler) handleViewerFollowed(ctx context.Context, logger *slog.Logger, viewer *core.Viewer) error {
 	// Generate an alert indicating that this viewer is now following the channel
 	err := h.produceOnscreenEvent(ctx, logger, e.Event{
 		Type: e.EventTypeToast,
@@ -76,7 +80,7 @@ func (h *handler) handleViewerFollowed(ctx context.Context, logger *slog.Logger,
 	return nil
 }
 
-func (h *handler) handleViewerCheered(ctx context.Context, logger *slog.Logger, viewerOrAnonymous *etwitch.Viewer, payload *etwitch.PayloadViewerCheered) error {
+func (h *handler) handleViewerCheered(ctx context.Context, logger *slog.Logger, viewerOrAnonymous *core.Viewer, payload *etwitch.PayloadViewerCheered) error {
 	// If not anonymous, credit fun points to the viewer's balance
 	if viewerOrAnonymous != nil {
 		accessToken, err := requestServiceToken(ctx, h.authServiceClient, viewerOrAnonymous)
@@ -123,7 +127,7 @@ func (h *handler) handleViewerCheered(ctx context.Context, logger *slog.Logger, 
 	return nil
 }
 
-func (h *handler) handleViewerRedeemedFunPoints(ctx context.Context, logger *slog.Logger, viewer *etwitch.Viewer, numPoints int, message string) error {
+func (h *handler) handleViewerRedeemedFunPoints(ctx context.Context, logger *slog.Logger, viewer *core.Viewer, numPoints int, message string) error {
 	// Parse our message text to see if it represents a request to generate an alert,
 	// and produce a new message to the 'generation-requests' queue if so
 	if numPoints >= 200 {
@@ -137,6 +141,7 @@ func (h *handler) handleViewerRedeemedFunPoints(ctx context.Context, logger *slo
 			err := h.produceGenerationRequest(ctx, logger, genreq.Request{
 				Type:   genreq.RequestTypeImage,
 				Viewer: *viewer,
+				State:  h.broadcastsClient.GetState(),
 				Payload: genreq.Payload{
 					Image: &genreq.PayloadImage{
 						Style: genreq.ImageStyleGhost,
@@ -156,7 +161,7 @@ func (h *handler) handleViewerRedeemedFunPoints(ctx context.Context, logger *slo
 	return nil
 }
 
-func (h *handler) handleViewerSubscribed(ctx context.Context, logger *slog.Logger, viewer *etwitch.Viewer, payload *etwitch.PayloadViewerSubscribed) error {
+func (h *handler) handleViewerSubscribed(ctx context.Context, logger *slog.Logger, viewer *core.Viewer, payload *etwitch.PayloadViewerSubscribed) error {
 	// Credit fun points to the viewer's balance
 	accessToken, err := requestServiceToken(ctx, h.authServiceClient, viewer)
 	if err != nil {
@@ -189,7 +194,7 @@ func (h *handler) handleViewerSubscribed(ctx context.Context, logger *slog.Logge
 	return nil
 }
 
-func (h *handler) handleViewerResubscribed(ctx context.Context, logger *slog.Logger, viewer *etwitch.Viewer, payload *etwitch.PayloadViewerResubscribed) error {
+func (h *handler) handleViewerResubscribed(ctx context.Context, logger *slog.Logger, viewer *core.Viewer, payload *etwitch.PayloadViewerResubscribed) error {
 	// Credit fun points to the viewer's balance
 	accessToken, err := requestServiceToken(ctx, h.authServiceClient, viewer)
 	if err != nil {
@@ -228,7 +233,7 @@ func (h *handler) handleViewerResubscribed(ctx context.Context, logger *slog.Log
 	return nil
 }
 
-func (h *handler) handleViewerReceivedGiftSub(ctx context.Context, logger *slog.Logger, viewer *etwitch.Viewer, payload *etwitch.PayloadViewerReceivedGiftSub) error {
+func (h *handler) handleViewerReceivedGiftSub(ctx context.Context, logger *slog.Logger, viewer *core.Viewer, payload *etwitch.PayloadViewerReceivedGiftSub) error {
 	// Credit fun points to the recipient's balance, same as if they'd subscribed
 	accessToken, err := requestServiceToken(ctx, h.authServiceClient, viewer)
 	if err != nil {
@@ -247,7 +252,7 @@ func (h *handler) handleViewerReceivedGiftSub(ctx context.Context, logger *slog.
 	return nil
 }
 
-func (h *handler) handleViewerGiftedSubs(ctx context.Context, logger *slog.Logger, viewerOrAnonymous *etwitch.Viewer, payload *etwitch.PayloadViewerGiftedSubs) error {
+func (h *handler) handleViewerGiftedSubs(ctx context.Context, logger *slog.Logger, viewerOrAnonymous *core.Viewer, payload *etwitch.PayloadViewerGiftedSubs) error {
 	// If not anonymous, credit fun points to the gifter's balance
 	if viewerOrAnonymous != nil {
 		accessToken, err := requestServiceToken(ctx, h.authServiceClient, viewerOrAnonymous)

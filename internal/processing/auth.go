@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"github.com/golden-vcr/auth"
-	etwitch "github.com/golden-vcr/schemas/twitch-events"
+	"github.com/golden-vcr/schemas/core"
 )
 
-func requestServiceToken(ctx context.Context, client auth.ServiceClient, viewer *etwitch.Viewer) (string, error) {
+func requestServiceToken(ctx context.Context, client auth.ServiceClient, viewer *core.Viewer) (string, error) {
 	// TEMP: Only allow this service to update the state of a single test user for now
 	if viewer.TwitchUserId != "90790024" {
 		return "", fmt.Errorf("testing is restricted to events instigated by user 90790024")
