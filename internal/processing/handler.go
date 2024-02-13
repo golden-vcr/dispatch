@@ -45,6 +45,8 @@ func (h *handler) Handle(ctx context.Context, logger *slog.Logger, ev *etwitch.E
 	switch ev.Type {
 	case etwitch.EventTypeViewerFollowed:
 		return h.handleViewerFollowed(ctx, logger, ev.Viewer)
+	case etwitch.EventTypeViewerRaided:
+		return h.handleViewerRaided(ctx, logger, ev.Viewer, ev.Payload.ViewerRaided)
 	case etwitch.EventTypeViewerCheered:
 		viewerOrAnonymous := ev.Viewer
 		return h.handleViewerCheered(ctx, logger, viewerOrAnonymous, ev.Payload.ViewerCheered)
@@ -71,6 +73,28 @@ func (h *handler) handleViewerFollowed(ctx context.Context, logger *slog.Logger,
 			Toast: &e.PayloadToast{
 				Type:   e.ToastTypeFollowed,
 				Viewer: viewer,
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to produce onscreen event: %w", err)
+	}
+	return nil
+}
+
+func (h *handler) handleViewerRaided(ctx context.Context, logger *slog.Logger, viewer *core.Viewer, payload *etwitch.PayloadViewerRaided) error {
+	// Generate an alert indicating that this viewer has raided
+	err := h.produceOnscreenEvent(ctx, logger, e.Event{
+		Type: e.EventTypeToast,
+		Payload: e.Payload{
+			Toast: &e.PayloadToast{
+				Type:   e.ToastTypeRaided,
+				Viewer: viewer,
+				Data: &e.ToastData{
+					Raided: &e.ToastDataRaided{
+						NumViewers: payload.NumRaiders,
+					},
+				},
 			},
 		},
 	})
