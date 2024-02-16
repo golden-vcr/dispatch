@@ -124,9 +124,9 @@ func main() {
 						return err
 					}
 					logger := app.Log().With("twitchEvent", ev)
-					app.Log().Info("Consumed from twitch-events")
+					logger.Info("Consumed from twitch-events")
 					if err := h.Handle(ctx, logger, &ev); err != nil {
-						app.Log().Error("Failed to handle event", "error", err)
+						logger.Info("Failed to handle event", "error", err)
 					}
 					return err
 				})
