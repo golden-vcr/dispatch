@@ -2,9 +2,10 @@ package processing
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 
+	"github.com/golden-vcr/alerts"
 	"github.com/golden-vcr/auth"
 	"github.com/golden-vcr/broadcasts"
 	"github.com/golden-vcr/ledger"
@@ -152,37 +153,19 @@ func (h *handler) handleViewerCheered(ctx context.Context, logger *slog.Logger, 
 }
 
 func (h *handler) handleViewerRedeemedFunPoints(ctx context.Context, logger *slog.Logger, viewer *core.Viewer, numPoints int, message string) error {
-	// Parse our message text to see if it represents a request to generate an alert,
-	// and produce a new message to the 'generation-requests' queue if so
-	if numPoints >= 200 {
-		ghostPrefix := "ghost of "
-		ghostSubject := ""
-		ghostPrefixPos := strings.Index(strings.ToLower(message), ghostPrefix)
-		if ghostPrefixPos >= 0 {
-			ghostSubject = strings.TrimSpace(message[ghostPrefixPos+len(ghostPrefix):])
+	requestType, generationRequestPayload, err := alerts.ParseRequest(message)
+	if err != nil {
+		if errors.Is(err, alerts.ErrNoRequest) {
+			return nil
 		}
-		if ghostSubject != "" {
-			err := h.produceGenerationRequest(ctx, logger, genreq.Request{
-				Type:   genreq.RequestTypeImage,
-				Viewer: *viewer,
-				State:  h.broadcastsClient.GetState(),
-				Payload: genreq.Payload{
-					Image: &genreq.PayloadImage{
-						Style: genreq.ImageStyleGhost,
-						Inputs: genreq.ImageInputs{
-							Ghost: &genreq.ImageInputsGhost{
-								Subject: ghostSubject,
-							},
-						},
-					},
-				},
-			})
-			if err != nil {
-				return fmt.Errorf("failed to produce generation request: %w", err)
-			}
-		}
+		return err
 	}
-	return nil
+	return h.produceGenerationRequest(ctx, logger, genreq.Request{
+		Type:    requestType,
+		Viewer:  *viewer,
+		State:   h.broadcastsClient.GetState(),
+		Payload: *generationRequestPayload,
+	})
 }
 
 func (h *handler) handleViewerSubscribed(ctx context.Context, logger *slog.Logger, viewer *core.Viewer, payload *etwitch.PayloadViewerSubscribed) error {
