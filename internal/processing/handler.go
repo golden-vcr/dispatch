@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/golden-vcr/alerts"
 	"github.com/golden-vcr/auth"
@@ -12,6 +13,7 @@ import (
 	"github.com/golden-vcr/schemas/core"
 	genreq "github.com/golden-vcr/schemas/generation-requests"
 	e "github.com/golden-vcr/schemas/onscreen-events"
+	eonscreen "github.com/golden-vcr/schemas/onscreen-events"
 	etwitch "github.com/golden-vcr/schemas/twitch-events"
 	"github.com/golden-vcr/server-common/rmq"
 	"golang.org/x/exp/slog"
@@ -153,6 +155,21 @@ func (h *handler) handleViewerCheered(ctx context.Context, logger *slog.Logger, 
 }
 
 func (h *handler) handleViewerRedeemedFunPoints(ctx context.Context, logger *slog.Logger, viewer *core.Viewer, numPoints int, message string) error {
+	if viewer != nil && strings.HasPrefix(strings.ToLower(message), "prayerbear") {
+		return h.produceOnscreenEvent(ctx, logger, eonscreen.Event{
+			Type: eonscreen.EventTypeImage,
+			Payload: eonscreen.Payload{
+				Image: &eonscreen.PayloadImage{
+					Viewer:      *viewer,
+					Style:       genreq.ImageStyleGhost,
+					Description: "",
+					Extra:       "",
+					ImageUrl:    "_PrayerBear",
+				},
+			},
+		})
+	}
+
 	requestType, generationRequestPayload, err := alerts.ParseRequest(message)
 	if err != nil {
 		if errors.Is(err, alerts.ErrNoRequest) {
