@@ -209,7 +209,12 @@ func (h *handler) handleViewerRedeemedFunPoints(ctx context.Context, logger *slo
 		}
 		accessToken = token
 	}
-	transaction, err := h.ledgerClient.RequestAlertRedemption(ctx, accessToken, 200, "static", (*json.RawMessage)(&alertRedemptionMetadata))
+	cost := 200
+	if staticImageDetails.ImageId == "stand-back" {
+		// TODO: Handle point cost in a centralized place (e.g. alerts lib)
+		cost = 300
+	}
+	transaction, err := h.ledgerClient.RequestAlertRedemption(ctx, accessToken, cost, "static", (*json.RawMessage)(&alertRedemptionMetadata))
 	if err != nil {
 		return false, err
 	}

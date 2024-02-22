@@ -12,8 +12,8 @@ github.com/golang-jwt/jwt/v4 v4.0.0 h1:RAqyYixv1p7uEnocuy8P1nru5wprCh/MH2BIlW5z5
 github.com/golang-jwt/jwt/v4 v4.0.0/go.mod h1:/xlHOz8bRuivTWchD4jCa+NbatV+wEUSzwAxVc6locg=
 github.com/golang-jwt/jwt/v5 v5.2.0 h1:d/ix8ftRUorsN+5eMIlF4T6J8CAt9rch3My2winC1Jw=
 github.com/golang-jwt/jwt/v5 v5.2.0/go.mod h1:pqrtFR0X4osieyHYxtmOUWsAWrfe1Q5UVIyoH402zdk=
-github.com/golden-vcr/alerts v0.3.0 h1:+TTHaDOMDe6PtwLhuVbvlhGPMCx5EnPpZk8EImYcaQc=
-github.com/golden-vcr/alerts v0.3.0/go.mod h1:QqBZpqz01Wqkt5rs2eecF70Y8PdhJ9d3teEKAiQ2dok=
+github.com/golden-vcr/alerts v0.3.1 h1:jG7xIzYoSQtm49VsNvO4EDkd6bghvinV0C6Qkk3Yi5g=
+github.com/golden-vcr/alerts v0.3.1/go.mod h1:QqBZpqz01Wqkt5rs2eecF70Y8PdhJ9d3teEKAiQ2dok=
 github.com/golden-vcr/auth v0.3.0 h1:DsS5n7j+itKPXy3h7yRzDCuP41l7bvrH6CY4mTj+wbU=
 github.com/golden-vcr/auth v0.3.0/go.mod h1:nex6tPGxTpD8lrAhgGKaScQn7+WrVD4CjygaWpZ+i0M=
 github.com/golden-vcr/broadcasts v0.1.0 h1:X+q2QmgWR86w46h0jcsnbG+iZ3Y54KYvnefqusS9PbU=

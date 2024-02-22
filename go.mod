@@ -4,7 +4,7 @@ go 1.21.3
 
 require (
 	github.com/codingconcepts/env v0.0.0-20200821220118-a8fbf8d84482
-	github.com/golden-vcr/alerts v0.3.0
+	github.com/golden-vcr/alerts v0.3.1
 	github.com/golden-vcr/auth v0.3.0
 	github.com/golden-vcr/broadcasts v0.1.0
 	github.com/golden-vcr/ledger v0.5.0
