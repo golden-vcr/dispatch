@@ -2,9 +2,9 @@ package processing
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/golden-vcr/alerts"
 	"github.com/golden-vcr/auth"
@@ -13,7 +13,6 @@ import (
 	"github.com/golden-vcr/schemas/core"
 	genreq "github.com/golden-vcr/schemas/generation-requests"
 	e "github.com/golden-vcr/schemas/onscreen-events"
-	eonscreen "github.com/golden-vcr/schemas/onscreen-events"
 	etwitch "github.com/golden-vcr/schemas/twitch-events"
 	"github.com/golden-vcr/server-common/rmq"
 	"golang.org/x/exp/slog"
@@ -54,7 +53,7 @@ func (h *handler) Handle(ctx context.Context, logger *slog.Logger, ev *etwitch.E
 		viewerOrAnonymous := ev.Viewer
 		return h.handleViewerCheered(ctx, logger, viewerOrAnonymous, ev.Payload.ViewerCheered)
 	case etwitch.EventTypeViewerRedeemedFunPoints:
-		return h.handleViewerRedeemedFunPoints(ctx, logger, ev.Viewer, ev.Payload.ViewerRedeemedFunPoints.NumPoints, ev.Payload.ViewerRedeemedFunPoints.Message)
+		return h.handleViewerRedeemedFunPoints(ctx, logger, ev.Viewer, ev.Payload.ViewerRedeemedFunPoints.NumPoints, ev.Payload.ViewerRedeemedFunPoints.Message, "")
 	case etwitch.EventTypeViewerSubscribed:
 		return h.handleViewerSubscribed(ctx, logger, ev.Viewer, ev.Payload.ViewerSubscribed)
 	case etwitch.EventTypeViewerResubscribed:
@@ -109,11 +108,13 @@ func (h *handler) handleViewerRaided(ctx context.Context, logger *slog.Logger, v
 
 func (h *handler) handleViewerCheered(ctx context.Context, logger *slog.Logger, viewerOrAnonymous *core.Viewer, payload *etwitch.PayloadViewerCheered) error {
 	// If not anonymous, credit fun points to the viewer's balance
+	accessToken := ""
 	if viewerOrAnonymous != nil {
-		accessToken, err := requestServiceToken(ctx, h.authServiceClient, viewerOrAnonymous)
+		token, err := requestServiceToken(ctx, h.authServiceClient, viewerOrAnonymous)
 		if err != nil {
 			return fmt.Errorf("failed to get service token: %w", err)
 		}
+		accessToken = token
 		flowId, err := h.ledgerClient.RequestCreditFromCheer(ctx, accessToken, payload.NumBits, payload.Message)
 		if err != nil {
 			return fmt.Errorf("failed to request credit from cheer: %w", err)
@@ -149,40 +150,75 @@ func (h *handler) handleViewerCheered(ctx context.Context, logger *slog.Logger, 
 	// an alert
 	if viewerOrAnonymous != nil {
 		viewer := viewerOrAnonymous
-		return h.handleViewerRedeemedFunPoints(ctx, logger, viewer, payload.NumBits, payload.Message)
+		return h.handleViewerRedeemedFunPoints(ctx, logger, viewer, payload.NumBits, payload.Message, accessToken)
 	}
 	return nil
 }
 
-func (h *handler) handleViewerRedeemedFunPoints(ctx context.Context, logger *slog.Logger, viewer *core.Viewer, numPoints int, message string) error {
-	if viewer != nil && strings.HasPrefix(strings.ToLower(message), "prayerbear") {
-		return h.produceOnscreenEvent(ctx, logger, eonscreen.Event{
-			Type: eonscreen.EventTypeImage,
-			Payload: eonscreen.Payload{
-				Image: &eonscreen.PayloadImage{
-					Viewer:      *viewer,
-					Style:       genreq.ImageStyleGhost,
-					Description: "",
-					Extra:       "",
-					ImageUrl:    "_PrayerBear",
-				},
-			},
+func (h *handler) handleViewerRedeemedFunPoints(ctx context.Context, logger *slog.Logger, viewer *core.Viewer, numPoints int, message string, accessToken string) error {
+	// See if the user-provided message text indicates that the viewer is requesting an
+	// alert that requires generating dynamic assets, and if so, produce an event to the
+	// generation-requests queue so that the dynamo service will generate those assets,
+	// and then ultimately produce to onscreen-events when ready to show the alert
+	requestType, generationRequestPayload, err := alerts.ParseGenerationRequest(message)
+	if err == nil {
+		return h.produceGenerationRequest(ctx, logger, genreq.Request{
+			Type:    requestType,
+			Viewer:  *viewer,
+			State:   h.broadcastsClient.GetState(),
+			Payload: *generationRequestPayload,
 		})
 	}
 
-	requestType, generationRequestPayload, err := alerts.ParseRequest(message)
+	// If we encountered an unexpected error when parsing our message, abort
+	if !errors.Is(err, alerts.ErrNoGenerationRequest) {
+		return err
+	}
+
+	// Otherwise, continue checking to see if the viewer's message contains any keywords
+	// used to trigger static alerts
+	staticImageDetails, err := alerts.ParseStaticAlert(message)
 	if err != nil {
-		if errors.Is(err, alerts.ErrNoRequest) {
+		if errors.Is(err, alerts.ErrNoStaticAlert) {
 			return nil
 		}
 		return err
 	}
-	return h.produceGenerationRequest(ctx, logger, genreq.Request{
-		Type:    requestType,
-		Viewer:  *viewer,
-		State:   h.broadcastsClient.GetState(),
-		Payload: *generationRequestPayload,
+
+	// If we've identified a static alert, attempt to deduct points from the user's
+	// ledger balance and then produce the alert to onscreen-events
+	alertRedemptionMetadata, err := json.Marshal(staticImageDetails)
+	if err != nil {
+		return err
+	}
+	if accessToken == "" {
+		token, err := requestServiceToken(ctx, h.authServiceClient, viewer)
+		if err != nil {
+			return fmt.Errorf("failed to get service token: %w", err)
+		}
+		accessToken = token
+	}
+	transaction, err := h.ledgerClient.RequestAlertRedemption(ctx, accessToken, 200, "static", (*json.RawMessage)(&alertRedemptionMetadata))
+	if err != nil {
+		return err
+	}
+	defer transaction.Finalize(ctx)
+	err = h.produceOnscreenEvent(ctx, logger, e.Event{
+		Type: e.EventTypeImage,
+		Payload: e.Payload{
+			Image: &e.PayloadImage{
+				Type:   e.ImageTypeStatic,
+				Viewer: *viewer,
+				Details: e.ImageDetails{
+					Static: staticImageDetails,
+				},
+			},
+		},
 	})
+	if err == nil {
+		transaction.Accept(ctx)
+	}
+	return err
 }
 
 func (h *handler) handleViewerSubscribed(ctx context.Context, logger *slog.Logger, viewer *core.Viewer, payload *etwitch.PayloadViewerSubscribed) error {
