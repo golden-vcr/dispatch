@@ -53,7 +53,8 @@ func (h *handler) Handle(ctx context.Context, logger *slog.Logger, ev *etwitch.E
 		viewerOrAnonymous := ev.Viewer
 		return h.handleViewerCheered(ctx, logger, viewerOrAnonymous, ev.Payload.ViewerCheered)
 	case etwitch.EventTypeViewerRedeemedFunPoints:
-		return h.handleViewerRedeemedFunPoints(ctx, logger, ev.Viewer, ev.Payload.ViewerRedeemedFunPoints.NumPoints, ev.Payload.ViewerRedeemedFunPoints.Message, "")
+		_, err := h.handleViewerRedeemedFunPoints(ctx, logger, ev.Viewer, ev.Payload.ViewerRedeemedFunPoints.NumPoints, ev.Payload.ViewerRedeemedFunPoints.Message, "")
+		return err
 	case etwitch.EventTypeViewerSubscribed:
 		return h.handleViewerSubscribed(ctx, logger, ev.Viewer, ev.Payload.ViewerSubscribed)
 	case etwitch.EventTypeViewerResubscribed:
@@ -125,44 +126,54 @@ func (h *handler) handleViewerCheered(ctx context.Context, logger *slog.Logger, 
 		)
 	}
 
-	// Generate an alert to display the user's cheer
-	err := h.produceOnscreenEvent(ctx, logger, e.Event{
-		Type: e.EventTypeToast,
-		Payload: e.Payload{
-			Toast: &e.PayloadToast{
-				Type:   e.ToastTypeCheered,
-				Viewer: viewerOrAnonymous,
-				Data: &e.ToastData{
-					Cheered: &e.ToastDataCheered{
-						NumBits: payload.NumBits,
-						Message: payload.Message,
-					},
-				},
-			},
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to produce onscreen event: %w", err)
-	}
-
 	// If we have a viewer, parse their message to determine if we should immediately
 	// redeem some or all of the fun points they were just credited in order to produce
 	// an alert
+	shouldProduceCheerToast := true
 	if viewerOrAnonymous != nil {
 		viewer := viewerOrAnonymous
-		return h.handleViewerRedeemedFunPoints(ctx, logger, viewer, payload.NumBits, payload.Message, accessToken)
+		instigatedAlerts, err := h.handleViewerRedeemedFunPoints(ctx, logger, viewer, payload.NumBits, payload.Message, accessToken)
+		if err != nil {
+			return err
+		}
+		if instigatedAlerts {
+			shouldProduceCheerToast = false
+		}
+	}
+
+	// If the user cheered without any keywords or prompts to trigger a specialized
+	// alert, just send their message to the screen directly
+	if shouldProduceCheerToast {
+		err := h.produceOnscreenEvent(ctx, logger, e.Event{
+			Type: e.EventTypeToast,
+			Payload: e.Payload{
+				Toast: &e.PayloadToast{
+					Type:   e.ToastTypeCheered,
+					Viewer: viewerOrAnonymous,
+					Data: &e.ToastData{
+						Cheered: &e.ToastDataCheered{
+							NumBits: payload.NumBits,
+							Message: payload.Message,
+						},
+					},
+				},
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to produce onscreen event: %w", err)
+		}
 	}
 	return nil
 }
 
-func (h *handler) handleViewerRedeemedFunPoints(ctx context.Context, logger *slog.Logger, viewer *core.Viewer, numPoints int, message string, accessToken string) error {
+func (h *handler) handleViewerRedeemedFunPoints(ctx context.Context, logger *slog.Logger, viewer *core.Viewer, numPoints int, message string, accessToken string) (bool, error) {
 	// See if the user-provided message text indicates that the viewer is requesting an
 	// alert that requires generating dynamic assets, and if so, produce an event to the
 	// generation-requests queue so that the dynamo service will generate those assets,
 	// and then ultimately produce to onscreen-events when ready to show the alert
 	requestType, generationRequestPayload, err := alerts.ParseGenerationRequest(message)
 	if err == nil {
-		return h.produceGenerationRequest(ctx, logger, genreq.Request{
+		return true, h.produceGenerationRequest(ctx, logger, genreq.Request{
 			Type:    requestType,
 			Viewer:  *viewer,
 			State:   h.broadcastsClient.GetState(),
@@ -172,7 +183,7 @@ func (h *handler) handleViewerRedeemedFunPoints(ctx context.Context, logger *slo
 
 	// If we encountered an unexpected error when parsing our message, abort
 	if !errors.Is(err, alerts.ErrNoGenerationRequest) {
-		return err
+		return false, err
 	}
 
 	// Otherwise, continue checking to see if the viewer's message contains any keywords
@@ -180,27 +191,27 @@ func (h *handler) handleViewerRedeemedFunPoints(ctx context.Context, logger *slo
 	staticImageDetails, err := alerts.ParseStaticAlert(message)
 	if err != nil {
 		if errors.Is(err, alerts.ErrNoStaticAlert) {
-			return nil
+			return false, nil
 		}
-		return err
+		return false, err
 	}
 
 	// If we've identified a static alert, attempt to deduct points from the user's
 	// ledger balance and then produce the alert to onscreen-events
 	alertRedemptionMetadata, err := json.Marshal(staticImageDetails)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if accessToken == "" {
 		token, err := requestServiceToken(ctx, h.authServiceClient, viewer)
 		if err != nil {
-			return fmt.Errorf("failed to get service token: %w", err)
+			return false, fmt.Errorf("failed to get service token: %w", err)
 		}
 		accessToken = token
 	}
 	transaction, err := h.ledgerClient.RequestAlertRedemption(ctx, accessToken, 200, "static", (*json.RawMessage)(&alertRedemptionMetadata))
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer transaction.Finalize(ctx)
 	err = h.produceOnscreenEvent(ctx, logger, e.Event{
@@ -218,7 +229,7 @@ func (h *handler) handleViewerRedeemedFunPoints(ctx context.Context, logger *slo
 	if err == nil {
 		transaction.Accept(ctx)
 	}
-	return err
+	return true, err
 }
 
 func (h *handler) handleViewerSubscribed(ctx context.Context, logger *slog.Logger, viewer *core.Viewer, payload *etwitch.PayloadViewerSubscribed) error {
