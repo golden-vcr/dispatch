@@ -20,8 +20,8 @@ github.com/golden-vcr/broadcasts v0.1.0 h1:X+q2QmgWR86w46h0jcsnbG+iZ3Y54KYvnefqu
 github.com/golden-vcr/broadcasts v0.1.0/go.mod h1:q0H9Yqk3KefOach1I2syHhDdfkNKIshAYOufiTOe0W0=
 github.com/golden-vcr/ledger v0.5.0 h1:VAh/URy+WwSnR8kh4VNA1c95PAmraat12MXL/yMjfxY=
 github.com/golden-vcr/ledger v0.5.0/go.mod h1:9bbaRPndM7hsV2aOAm5Xkf0VFimKA42JMpQJGhRc6dg=
-github.com/golden-vcr/schemas v0.9.0 h1:ebsXVWGWbkb6zLnmMvSmvrDO3/khLVatrvhCzd5KXoA=
-github.com/golden-vcr/schemas v0.9.0/go.mod h1:ysUAmLCRIX0q9GZY1wgxdicBQMa5Y7eScHFJ1D3x0AU=
+github.com/golden-vcr/schemas v0.10.0 h1:8ldHgGaCd/MBlq0iLn2a4/evoHFIPdfDZxly12MQsAU=
+github.com/golden-vcr/schemas v0.10.0/go.mod h1:ysUAmLCRIX0q9GZY1wgxdicBQMa5Y7eScHFJ1D3x0AU=
 github.com/golden-vcr/server-common v0.9.0 h1:JiGfjw/eqjpgdSSQp3obiD8ErXYqGyc1FBCAxSubk/E=
 github.com/golden-vcr/server-common v0.9.0/go.mod h1:d6Sr5tVBYAyDU0akcfqxpmEw/2B++LmLJ6oUW7WfJGM=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=

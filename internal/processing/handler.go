@@ -45,6 +45,8 @@ type handler struct {
 
 func (h *handler) Handle(ctx context.Context, logger *slog.Logger, ev *etwitch.Event) error {
 	switch ev.Type {
+	case etwitch.EventTypeStreamHypeStarted:
+		return h.handleStreamHypeStarted(ctx, logger)
 	case etwitch.EventTypeViewerFollowed:
 		return h.handleViewerFollowed(ctx, logger, ev.Viewer)
 	case etwitch.EventTypeViewerRaided:
@@ -64,6 +66,33 @@ func (h *handler) Handle(ctx context.Context, logger *slog.Logger, ev *etwitch.E
 	case etwitch.EventTypeViewerGiftedSubs:
 		viewerOrAnonymous := ev.Viewer
 		return h.handleViewerGiftedSubs(ctx, logger, viewerOrAnonymous, ev.Payload.ViewerGiftedSubs)
+	}
+	return nil
+}
+
+func (h *handler) handleStreamHypeStarted(ctx context.Context, logger *slog.Logger) error {
+	// Generate an alert to signal the start of the hype train
+	err := h.produceOnscreenEvent(ctx, logger, e.Event{
+		Type: e.EventTypeImage,
+		Payload: e.Payload{
+			Image: &e.PayloadImage{
+				Type: e.ImageTypeStatic,
+				Viewer: core.Viewer{
+					// TODO: This is a sentinel value; image alerts shouldn't
+					// necessarily require a non-nil viewer
+					TwitchUserId:      "12826",
+					TwitchDisplayName: "Twitch",
+				},
+				Details: e.ImageDetails{
+					Static: &e.ImageDetailsStatic{
+						ImageId: "petertrain-a",
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to produce onscreen event: %w", err)
 	}
 	return nil
 }

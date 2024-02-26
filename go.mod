@@ -8,7 +8,7 @@ require (
 	github.com/golden-vcr/auth v0.3.0
 	github.com/golden-vcr/broadcasts v0.1.0
 	github.com/golden-vcr/ledger v0.5.0
-	github.com/golden-vcr/schemas v0.9.0
+	github.com/golden-vcr/schemas v0.10.0
 	github.com/golden-vcr/server-common v0.9.0
 	github.com/joho/godotenv v1.5.1
 	github.com/rabbitmq/amqp091-go v1.9.0
